@@ -26,7 +26,7 @@ app.use(express.json({ limit: '100mb' })); // Ajusta el límite según el tamañ
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 // Rutas
 
-app.use('/api/auth', authRoutes); // AuthAndSMS ---> LoginSIstema
+app.use('/api/authSystem', authRoutes); // AuthAndSMS ---> LoginSIstema
 
 // Gestion de OTP, sms
 app.use('/api/sms', smsRoutes);   // AuthAndSMS ---> SMS
