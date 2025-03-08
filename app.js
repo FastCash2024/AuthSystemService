@@ -9,7 +9,6 @@ import { fileURLToPath } from 'url'; // Asegúrate de importar fileURLToPath
 import connectDB from './config/db.js';
 
 import authRoutes from './api/routes/auth.js';
-import smsRoutes from './api/routes/smsRoutes.js';
 
 import { errorHandler } from './api/middleware/errorHandler.js';
 
@@ -27,9 +26,6 @@ app.use(express.urlencoded({ limit: '100mb', extended: true }));
 // Rutas
 
 app.use('/api/authSystem', authRoutes); // AuthAndSMS ---> LoginSIstema
-
-// Gestion de OTP, sms
-app.use('/api/sms', smsRoutes);   // AuthAndSMS ---> SMS
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
