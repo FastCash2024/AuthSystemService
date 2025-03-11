@@ -9,7 +9,8 @@ export const getAllUsers = async (req, res) => {
     const filter = {};
 
     if (tipoDeGrupo) {
-      const palabras = tipoDeGrupo.split(',').map(palabra => new RegExp(palabra.trim(), 'i'));
+      // const palabras = tipoDeGrupo.split(',').map(palabra => new RegExp(palabra.trim(), 'i'));
+      const palabras = tipoDeGrupo.map(palabra => new RegExp(palabra.trim(), 'i'));
       filter.tipoDeGrupo = { $in: palabras };
     }
     
