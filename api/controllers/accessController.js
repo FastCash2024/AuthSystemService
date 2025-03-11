@@ -4,13 +4,18 @@ import UserPersonal from '../models/AuthPersonalAccountCollection.js';
 // Obtener todos los usuarios
 export const getAllUsers = async (req, res) => {
   try {
-    const { nombrePersonal, cuenta, tipoDeGrupo, situacionLaboral, emailPersonal, limit = 5, page = 1 } = req.query;
+    const { nombrePersonal, cuenta, tipoDeGrupo, tipoGrupo, situacionLaboral, emailPersonal, limit = 5, page = 1 } = req.query;
     
     const filter = {};
-    
+
     if (tipoDeGrupo) {
-      const palabras = tipoDeGrupo.split(',').map(palabra => palabra.trim());
-      filter.tipoDeGrupo = palabras;
+      const palabras = tipoDeGrupo.split(',').map(palabra => new RegExp(palabra.trim(), 'i'));
+      filter.tipoDeGrupo = { $in: palabras };
+    }
+    
+    if (tipoGrupo) {
+      const palabras = tipoGrupo.split(',').map(palabra => palabra.trim());
+      filter.tipoDeGrupo = { $in: palabras };
     }
 
     if (situacionLaboral) {
