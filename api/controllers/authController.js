@@ -120,6 +120,8 @@ export const updateUser = async (req, res) => {
       emailPersonal,
       fotoURL,
       numeroDeTelefonoMovil,
+      cuentaAuditor,
+      cuentaPersonalAuditor
     } = req.body;
 
     // Verificar si el usuario existe
@@ -144,8 +146,9 @@ export const updateUser = async (req, res) => {
     user.nombrePersonal = nombrePersonal || user.nombrePersonal;
     user.emailPersonal = emailPersonal || user.emailPersonal;
     user.fotoURL = fotoURL || user.fotoURL;
-    user.numeroDeTelefonoMovil =
-      numeroDeTelefonoMovil || user.numeroDeTelefonoMovil;
+    user.numeroDeTelefonoMovil =numeroDeTelefonoMovil || user.numeroDeTelefonoMovil;
+    user.cuentaAuditor = cuentaAuditor;
+    user.cuentaPersonalAuditor = cuentaPersonalAuditor;
     // Guardar los cambios en la base de datos
     await user.save();
     // Responder con los datos actualizados del usuario
@@ -163,6 +166,8 @@ export const updateUser = async (req, res) => {
         emailPersonal: user.emailPersonal,
         fotoURL: user.fotoURL,
         numeroDeTelefonoMovil: user.numeroDeTelefonoMovil,
+        cuentaAuditor: user.cuentaAuditor,
+        cuentaPersonalAuditor: user.cuentaPersonalAuditor
       },
     });
   } catch (error) {
