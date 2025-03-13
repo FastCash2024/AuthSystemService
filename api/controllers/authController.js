@@ -121,7 +121,8 @@ export const updateUser = async (req, res) => {
       fotoURL,
       numeroDeTelefonoMovil,
       cuentaAuditor,
-      cuentaPersonalAuditor
+      cuentaPersonalAuditor,
+      fechaDeAuditoria
     } = req.body;
 
     // Verificar si el usuario existe
@@ -149,6 +150,7 @@ export const updateUser = async (req, res) => {
     user.numeroDeTelefonoMovil =numeroDeTelefonoMovil || user.numeroDeTelefonoMovil;
     user.cuentaAuditor = cuentaAuditor;
     user.cuentaPersonalAuditor = cuentaPersonalAuditor;
+    user.fechaDeAuditoria = fechaDeAuditoria
     // Guardar los cambios en la base de datos
     await user.save();
     // Responder con los datos actualizados del usuario

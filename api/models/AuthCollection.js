@@ -23,6 +23,7 @@ const userSchema = new mongoose.Schema(
 
     cuentaAuditor: String,
     cuentaPersonalAuditor: String,
+    fechaDeAuditoria: String
   },
   {
     timestamps: true,
