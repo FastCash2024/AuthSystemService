@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/AuthCollection.js";
 import UserPersonal from "../models/AuthPersonalAccountCollection.js";
-import {uploadFile} from "../models/S3Model.js";
+import { uploadFile } from "../models/S3Model.js";
+import { redis } from "../config/redis.js";
 
 // REGISTER, LOGIN, AND UPDATE CUENTAS OPERATIVAS
 export const register = async (req, res) => {
@@ -20,9 +21,9 @@ export const register = async (req, res) => {
     } = req.body;
 
     // Verificar si el usuario ya existe
-    const userExists = await User.findOne({$or: [{cuenta}]});
+    const userExists = await User.findOne({ $or: [{ cuenta }] });
     if (userExists) {
-      return res.status(400).json({message: "User already exists"});
+      return res.status(400).json({ message: "User already exists" });
     }
 
     // Encriptar la contraseña
@@ -44,7 +45,7 @@ export const register = async (req, res) => {
     await user.save();
 
     // Crear token JWT
-    const token = jwt.sign({userId: user._id}, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
 
@@ -62,29 +63,41 @@ export const register = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({message: error.message});
+    res.status(500).json({ message: error.message });
   }
 };
+
 export const login = async (req, res) => {
   try {
-    const {cuenta, password} = req.body;
+    const { cuenta, password } = req.body;
 
     // Verificar si el usuario existe
-    const user = await User.findOne({cuenta});
+    const user = await User.findOne({ cuenta });
     if (!user) {
-      return res.status(400).json({message: "Usuario incorrecto"});
+      return res.status(400).json({ message: "Usuario incorrecto" });
     }
 
     // Verificar la contraseña
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({message: "Contraseña incorrecta"});
+      return res.status(400).json({ message: "Contraseña incorrecta" });
     }
 
-    // Crear token JWT
-    const token = jwt.sign({userId: user._id}, process.env.JWT_SECRET, {
-      expiresIn: "1d",
+    // Verificar si ya hay una sesión activa en Redis
+    const existingToken = await redis.get(`session:${user._id}`);
+    if (existingToken) {
+      return res.status(403).json({ message: "Ya tienes una sesión activa" });
+    }
+
+    // Generar un nuevo token
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1d", // Token expira en 1 día
     });
+
+    // Guardar en Redis (Reemplaza cualquier sesión anterior)
+    await redis.set(`session:${user._id}`, token, "EX", 86400); // Expira en 1 día (86400s)
+
+    // Responder con el token y la información del usuario
     res.json({
       token,
       user: {
@@ -102,12 +115,13 @@ export const login = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({message: error.message});
+    res.status(500).json({ message: error.message });
   }
 };
+
 export const updateUser = async (req, res) => {
   try {
-    const {userId} = req.params; // Obtener el id del usuario de la URL
+    const { userId } = req.params; // Obtener el id del usuario de la URL
     const {
       origenDeLaCuenta,
       tipoDeGrupo,
@@ -128,7 +142,7 @@ export const updateUser = async (req, res) => {
     // Verificar si el usuario existe
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({message: "Usuario no encontrado"});
+      return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
     // Si se pasa una nueva contraseña, encriptarla
@@ -147,7 +161,7 @@ export const updateUser = async (req, res) => {
     user.nombrePersonal = nombrePersonal || user.nombrePersonal;
     user.emailPersonal = emailPersonal || user.emailPersonal;
     user.fotoURL = fotoURL || user.fotoURL;
-    user.numeroDeTelefonoMovil =numeroDeTelefonoMovil || user.numeroDeTelefonoMovil;
+    user.numeroDeTelefonoMovil = numeroDeTelefonoMovil || user.numeroDeTelefonoMovil;
     user.cuentaAuditor = cuentaAuditor;
     user.cuentaPersonalAuditor = cuentaPersonalAuditor;
     user.fechaDeAuditoria = fechaDeAuditoria
@@ -173,19 +187,19 @@ export const updateUser = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({message: error.message});
+    res.status(500).json({ message: error.message });
   }
 };
 
 // REGISTER, LOGIN, AND UPDATE CUENTAS PERSONALES
 export const registerPersonal = async (req, res) => {
   try {
-    const {email, password, codificacionDeRoles} = req.body;
+    const { email, password, codificacionDeRoles } = req.body;
 
     // Verificar si el usuario ya existe
-    const userExists = await UserPersonal.findOne({$or: [{email}]});
+    const userExists = await UserPersonal.findOne({ $or: [{ email }] });
     if (userExists) {
-      return res.status(400).json({message: "El usuario ya existe"});
+      return res.status(400).json({ message: "El usuario ya existe" });
     }
 
     // Encriptar la contraseña
@@ -199,7 +213,7 @@ export const registerPersonal = async (req, res) => {
     });
     await user.save();
     // Crear token JWT
-    const token = jwt.sign({userId: user._id}, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
 
@@ -211,25 +225,25 @@ export const registerPersonal = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({message: error.message});
+    res.status(500).json({ message: error.message });
   }
 };
 export const loginPersonal = async (req, res) => {
   try {
-    const {email, password} = req.body;
+    const { email, password } = req.body;
 
     // Verificar si el usuario existe
-    const user = await UserPersonal.findOne({email});
+    const user = await UserPersonal.findOne({ email });
     if (!user) {
-      return res.status(400).json({message: "Usuario incorrecto"});
+      return res.status(400).json({ message: "Usuario incorrecto" });
     }
     // Verificar la contraseña
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({message: "Contraseña incorrecta"});
+      return res.status(400).json({ message: "Contraseña incorrecta" });
     }
     // Crear token JWT
-    const token = jwt.sign({userId: user._id}, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
     res.json({
@@ -247,12 +261,13 @@ export const loginPersonal = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({message: error.message});
+    res.status(500).json({ message: error.message });
   }
 };
+
 export const updateUserPersonal = async (req, res) => {
   try {
-    const {userId} = req.params; // Obtener el id del usuario de la URL
+    const { userId } = req.params; // Obtener el id del usuario de la URL
     const {
       cuenta,
       apodo,
@@ -267,7 +282,7 @@ export const updateUserPersonal = async (req, res) => {
     // Verificar si el usuario existe
     const user = await UserPersonal.findById(userId);
     if (!user) {
-      return res.status(404).json({message: "Usuario no encontrado"});
+      return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
     // Si se pasa una nueva contraseña, encriptarla
@@ -285,7 +300,7 @@ export const updateUserPersonal = async (req, res) => {
       } else {
         res
           .status(500)
-          .json({error: "Error uploading file", details: error.message});
+          .json({ error: "Error uploading file", details: error.message });
       }
     }
 
@@ -319,22 +334,31 @@ export const updateUserPersonal = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({message: error.message});
+    res.status(500).json({ message: error.message });
   }
 };
 
 // Login with token cuentas operativas y cuentas personales
 export const getProfileWithToken = async (req, res) => {
-  const token = req.headers.authorization && req.headers.authorization; // Obtener el token del header
+  const token = req.headers.authorization?.split(" ")[1]; // Obtener solo el token
+
   if (!token) {
-    return res.status(401).json({message: "Token requerido"});
+    return res.status(401).json({ message: "Token requerido" });
   }
 
   try {
     // Verificar el token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.userId);
-    // Responder con la información del usuario, similar al login
+
+    // Obtener el token guardado en Redis
+    const storedToken = await redis.get(`session:${decoded.userId}`);
+
+    if (!storedToken || storedToken !== token) {
+      return res.status(401).json({ message: "Sesión no válida o ha sido cerrada" });
+    }
+
+    // Buscar en User
+    let user = await User.findById(decoded.userId);
     if (user) {
       return res.json({
         token,
@@ -352,11 +376,12 @@ export const getProfileWithToken = async (req, res) => {
         },
       });
     }
-    const userPersonal = await UserPersonal.findById(decoded.userId);
+
+    // Buscar en UserPersonal
+    let userPersonal = await UserPersonal.findById(decoded.userId);
     if (userPersonal) {
-      // Responder con los datos actualizados del usuario
       return res.json({
-        message: "Usuario actualizado con éxito",
+        token,
         user: {
           id: userPersonal._id,
           email: userPersonal.email,
@@ -370,24 +395,24 @@ export const getProfileWithToken = async (req, res) => {
         },
       });
     }
-    if (!user && !userPersonal) {
-      return res.status(404).json({message: "Usuario no encontrado"});
-    }
+
+    return res.status(404).json({ message: "Usuario no encontrado" });
   } catch (error) {
-    res.status(403).json({message: error.message});
+    return res.status(403).json({ message: "Token inválido o expirado" });
   }
 };
+
 export const getUsersWithFilters = async (req, res) => {
   try {
-    const {nombreCompleto, email, age, status} = req.query;
+    const { nombreCompleto, email, age, status } = req.query;
     const filter = {};
 
     // Aplicar filtros opcionales si están presentes en `req.query`
     if (nombreCompleto) {
-      filter.nombreCompleto = {$regex: nombreCompleto, $options: "i"};
+      filter.nombreCompleto = { $regex: nombreCompleto, $options: "i" };
     }
     if (email) {
-      filter.email = {$regex: email, $options: "i"};
+      filter.email = { $regex: email, $options: "i" };
     }
     if (age) {
       filter.age = parseInt(age);
@@ -417,27 +442,27 @@ export const getUsersWithFilters = async (req, res) => {
       totalDocuments,
     });
   } catch (error) {
-    res.status(500).json({message: error.message});
+    res.status(500).json({ message: error.message });
   }
 };
 export const loginVerificacion = async (req, res) => {
   try {
-    const {email, password} = req.body;
+    const { email, password } = req.body;
 
     // Verificar si el usuario existe
-    const user = await User.findOne({email});
+    const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({message: "Usuario incorrecto"});
+      return res.status(400).json({ message: "Usuario incorrecto" });
     }
 
     // Verificar la contraseña
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({message: "Contraseña incorrecta"});
+      return res.status(400).json({ message: "Contraseña incorrecta" });
     }
 
     // Crear token JWT
-    const token = jwt.sign({userId: user._id}, process.env.JWT_SECRET, {
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
 
@@ -450,6 +475,6 @@ export const loginVerificacion = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({message: "Server error"});
+    res.status(500).json({ message: "Server error" });
   }
 };
