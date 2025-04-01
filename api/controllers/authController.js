@@ -71,33 +71,27 @@ export const login = async (req, res) => {
   try {
     const { cuenta, password } = req.body;
 
-    // Verificar si el usuario existe
     const user = await User.findOne({ cuenta });
     if (!user) {
       return res.status(400).json({ message: "Usuario incorrecto" });
     }
 
-    // Verificar la contraseña
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Contraseña incorrecta" });
     }
 
-    // Verificar si ya hay una sesión activa en Redis
     const existingToken = await redis.get(`session:${user._id}`);
     if (existingToken) {
-      return res.status(403).json({ message: "Ya tienes una sesión activa" });
+      await redis.del(`session:${user._id}`);
     }
 
-    // Generar un nuevo token
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1d", // Token expira en 1 día
+      expiresIn: "1d", 
     });
 
-    // Guardar en Redis (Reemplaza cualquier sesión anterior)
-    await redis.set(`session:${user._id}`, token, "EX", 86400); // Expira en 1 día (86400s)
+    await redis.set(`session:${user._id}`, token, "EX", 86400); 
 
-    // Responder con el token y la información del usuario
     res.json({
       token,
       user: {
@@ -118,6 +112,7 @@ export const login = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 export const updateUser = async (req, res) => {
   try {
