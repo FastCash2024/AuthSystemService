@@ -340,7 +340,7 @@ export const updateUserPersonal = async (req, res) => {
 
 // Login with token cuentas operativas y cuentas personales
 export const getProfileWithToken = async (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1]; // Obtener solo el token
+  const token = req.headers.authorization; // Obtener solo el token
 
   if (!token) {
     return res.status(401).json({ message: "Token requerido" });
