@@ -223,24 +223,34 @@ export const registerPersonal = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 export const loginPersonal = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Verificar si el usuario existe
     const user = await UserPersonal.findOne({ email });
     if (!user) {
       return res.status(400).json({ message: "Usuario incorrecto" });
     }
-    // Verificar la contraseña
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ message: "Contraseña incorrecta" });
     }
-    // Crear token JWT
+
+    const sessionKey = `session:${user._id}`;
+    const existingToken = await redis.get(sessionKey);
+
+    if (existingToken) {
+      await redis.del(sessionKey);
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: "1d",
     });
+
+    await redis.set(sessionKey, token, "EX", 86400);
+
     res.json({
       token,
       user: {
@@ -259,6 +269,7 @@ export const loginPersonal = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 export const updateUserPersonal = async (req, res) => {
   try {
