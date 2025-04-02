@@ -5,6 +5,7 @@ import User from "../models/AuthCollection.js";
 import UserPersonal from "../models/AuthPersonalAccountCollection.js";
 import { uploadFile } from "../models/S3Model.js";
 import { redis } from "../config/redis.js";
+import { notifySessionChange } from "./socketController.js";
 
 // REGISTER, LOGIN, AND UPDATE CUENTAS OPERATIVAS
 export const register = async (req, res) => {
@@ -83,14 +84,18 @@ export const login = async (req, res) => {
 
     const existingToken = await redis.get(`session:${user._id}`);
     if (existingToken) {
+      console.log(`Sesión activa encontrada en Redis para userId=${user._id}`);
+      
+      notifySessionChange(req.io, user._id, "newLogin");
+
       await redis.del(`session:${user._id}`);
     }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1d", 
+      expiresIn: "1d",
     });
 
-    await redis.set(`session:${user._id}`, token, "EX", 86400); 
+    await redis.set(`session:${user._id}`, token, "EX", 86400);
 
     res.json({
       token,
@@ -109,10 +114,10 @@ export const login = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Error en login:", error);
     res.status(500).json({ message: error.message });
   }
 };
-
 
 export const updateUser = async (req, res) => {
   try {
