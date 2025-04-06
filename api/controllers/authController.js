@@ -4,8 +4,118 @@ import jwt from "jsonwebtoken";
 import User from "../models/AuthCollection.js";
 import UserPersonal from "../models/AuthPersonalAccountCollection.js";
 import { uploadFile } from "../models/S3Model.js";
-import { redis } from "../config/redis.js";
-import { notifySessionChange } from "./socketController.js";
+import { redis, pub } from "../config/redis.js"; // Importamos `pub` para publicar eventos
+
+
+
+
+
+
+export const login = async (req, res) => {
+  try {
+    const { cuenta, password } = req.body;
+
+    const user = await User.findOne({ cuenta });
+    if (!user) {
+      return res.status(400).json({ message: "Usuario incorrecto" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Contraseña incorrecta" });
+    }
+
+    // Verificar si hay una sesión activa
+    const existingToken = await redis.get(`session:${user._id}`);
+    if (existingToken) {
+      await redis.del(`session:${user._id}`); // 🔹 Eliminar sesión anterior
+      await redis.del(`userStatus:${user._id}`); // 🔹 Marcar como offline
+      pub.publish("logout", JSON.stringify({ userId: user._id })); // 🔹 Notificar WebSockets
+    }
+
+    // Generar nuevo token
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "1d",
+    });
+
+    // Guardar sesión en Redis (24h)
+    await redis.set(`session:${user._id}`, token, "EX", 86400);
+    await redis.set(`userStatus:${user._id}`, "online", "EX", 86400); // Estado en línea
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        origenDeLaCuenta: user.origenDeLaCuenta,
+        tipoDeGrupo: user.tipoDeGrupo,
+        codificacionDeRoles: user.codificacionDeRoles,
+        apodo: user.apodo,
+        cuenta: user.cuenta,
+        email: user.email,
+        situacionLaboral: user.situacionLaboral,
+        fotoURL: user.fotoURL,
+        numeroDeTelefonoMovil: user.numeroDeTelefonoMovil,
+        emailPersonal: user.emailPersonal,
+        nombrePersonal: user.nombrePersonal,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+
+export const getOnlineUsers = async (req, res) => {
+  try {
+    const keys = await redis.keys("userStatus:*"); // Buscar todas las claves userStatus
+    console.log("Claves obtenidas:", keys);
+    const onlineUsers = await Promise.all(
+      keys.map(async (key) => {
+        const parts = key.split(":");
+        const userId = parts.slice(1).join(":");
+        console.log("Extrayendo userId:", userId);
+        const user = await User.findById(userId).select("cuenta apodo email");
+        return user;
+      })
+    );
+
+    res.json({ onlineUsers });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+
+
+export const logout = async (req, res) => {
+  const { userId } = req.body;
+
+  try {
+    await redis.del(`session:${userId}`); // Eliminar sesión de Redis
+    await redis.set(`userStatus:${userId}`, 'offline', 'EX', 86400); // Marcar como "offline"
+
+    // 🔴 Publicar evento de desconexión en Redis
+    pub.publish("logout", JSON.stringify({ userId, status: "offline" }));
+
+    res.json({ message: "Sesión cerrada con éxito" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+
+
+
+
+
+
+
 
 // REGISTER, LOGIN, AND UPDATE CUENTAS OPERATIVAS
 export const register = async (req, res) => {
@@ -68,56 +178,8 @@ export const register = async (req, res) => {
   }
 };
 
-export const login = async (req, res) => {
-  try {
-    const { cuenta, password } = req.body;
 
-    const user = await User.findOne({ cuenta });
-    if (!user) {
-      return res.status(400).json({ message: "Usuario incorrecto" });
-    }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Contraseña incorrecta" });
-    }
-
-    const existingToken = await redis.get(`session:${user._id}`);
-    if (existingToken) {
-      console.log(`Sesión activa encontrada en Redis para userId=${user._id}`);
-      
-      notifySessionChange(req.io, user._id, "newLogin");
-
-      await redis.del(`session:${user._id}`);
-    }
-
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "1d",
-    });
-
-    await redis.set(`session:${user._id}`, token, "EX", 86400);
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        origenDeLaCuenta: user.origenDeLaCuenta,
-        tipoDeGrupo: user.tipoDeGrupo,
-        codificacionDeRoles: user.codificacionDeRoles,
-        apodo: user.apodo,
-        cuenta: user.cuenta,
-        email: user.email,
-        situacionLaboral: user.situacionLaboral,
-        fotoURL: user.fotoURL,
-        numeroDeTelefonoMovil: user.numeroDeTelefonoMovil,
-        emailPersonal: user.emailPersonal,
-      },
-    });
-  } catch (error) {
-    console.error("Error en login:", error);
-    res.status(500).json({ message: error.message });
-  }
-};
 
 export const updateUser = async (req, res) => {
   try {
@@ -341,7 +403,8 @@ export const updateUserPersonal = async (req, res) => {
         dni: user.dni,
         nombreCompleto: user.nombreCompleto,
         codificacionDeRoles: user.codificacionDeRoles,
-        email: user.email,
+        emailPersonal: user.emailPersonal,
+        nombrePersonal: user.nombrePersonal,
       },
     });
   } catch (error) {
@@ -384,6 +447,8 @@ export const getProfileWithToken = async (req, res) => {
           situacionLaboral: user.situacionLaboral,
           fotoURL: user.fotoURL,
           numeroDeTelefonoMovil: user.numeroDeTelefonoMovil,
+          nombrePersonal: user.nombrePersonal,
+
         },
       });
     }
